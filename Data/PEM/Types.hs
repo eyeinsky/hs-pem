@@ -15,10 +15,12 @@ import Basement.NormalForm
 -- for now headers are not serialized at all.
 -- this is just available here as a placeholder for a later implementation.
 data PEM = PEM
-    { pemName    :: String                 -- ^ the name of the section, found after the dash BEGIN tag.
-    , pemHeader  :: [(String, ByteString)] -- ^ optionals key value pair header
-    , pemContent :: ByteString             -- ^ binary content of the section
+    { pemName    :: String     -- ^ the name of the section, found after the dash BEGIN tag.
+    , pemHeader  :: [Header]   -- ^ optionals key value pair header
+    , pemContent :: ByteString -- ^ binary content of the section
     } deriving (Show,Eq)
+
+type Header = (String, ByteString)
 
 instance NormalForm PEM where
     toNormalForm pem =
