@@ -14,12 +14,13 @@
 -- and a binary content encoded in base64.
 --
 module Data.PEM.Parser
-    ( pemParseBS
-    , pemParseLBS
-    ) where
+    -- ( pemParseBS
+    -- , pemParseLBS
+    -- )
+  where
 
 import Data.Char (isAsciiLower, isAsciiUpper, isDigit)
-import Data.Either (partitionEithers)
+import Data.Either (partitionEithers, rights)
 import Data.ByteString qualified as BS
 import Data.ByteString.Lazy qualified as BL
 import Data.ByteString.Lazy.Char8 qualified as BL8
@@ -30,6 +31,47 @@ import Data.ByteArray.Encoding (Base(Base64), convertFromBase)
 import Data.ByteArray qualified as BA
 
 type Line = BL.ByteString
+
+parsePems :: BL.ByteString -> [PEM]
+parsePems bl = rights $ go lines
+  where
+    lines = map unCR $ BL8.lines bl :: [Line]
+    go :: [Line] -> [Either [Line] PEM]
+    go lines = case parseOne lines of
+      Right (nonPemLines, pem, rest) -> Left nonPemLines : Right pem : go rest
+      Left err -> []
+
+parseOne :: [Line] -> Either String ([Line], PEM, [Line])
+parseOne = \case
+  line : rest -> case BL.stripPrefix beginMarker line of
+    Just pemFirstLine -> case BL.stripSuffix pemMarker pemFirstLine of
+      Just name -> let
+        (headers, rest') = parseEncapsulatedHeaders rest
+        in do
+        (contentLines, rest'') <- getContent name rest'
+        bs <- decodeBase64 $ BL.toStrict $ BL.concat contentLines
+        let pem = PEM { pemName = BL8.unpack name, pemHeader = headers, pemContent = bs }
+        Right ([], pem, rest'')
+      Nothing -> Left $ "Can't parse PEM first line suffix: " <> show line
+    Nothing -> case parseOne rest of
+      Left err -> Left err
+      Right (nonPemLines, pem, leftover) -> Right (line : nonPemLines, pem, leftover)
+  [] -> Left "No lines to parse a PEM from"
+  where
+    getContent :: BL.ByteString -> [Line] -> Either String ([Line], [Line])
+    getContent name lines_ = go lines_
+       where
+         go :: [Line] -> Either String ([Line], [Line])
+         go = \case
+           line : rest -> case BL.stripPrefix endMarker line of
+             Just pemLastLine -> case BL.stripSuffix pemMarker pemLastLine of
+               Just endName | endName == name -> Right ([], rest)
+                            | otherwise -> Left $ "end name doesn't match start name: " <> show (endName, name)
+               Nothing -> Left $ "Malformed PEM footer line: " <> show line
+             Nothing -> do
+               (contentLines, rest') <- go rest
+               Right (line : contentLines, rest')
+           [] -> Right ([], [])
 
 parseOnePEM :: [Line] -> Either (Maybe String) (PEM, [Line])
 parseOnePEM = \case
