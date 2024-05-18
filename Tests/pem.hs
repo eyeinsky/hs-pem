@@ -23,6 +23,7 @@ tests =
     , testUnmatchingNames
     , testDecodingSpecialNames
     , testProperty "marshall" testMarshall
+    , testDecodingHeaders
     ]
 
 testUnits = map (\(i, (p,bs)) -> testCase (show i) (pemWriteBS p @=? BC.pack bs))
@@ -104,6 +105,18 @@ testDecodingSpecialNames = testCase "special names" (Right expected @=? pemParse
             , "-----BEGIN hyphen-minus-----"
             , "-----END hyphen-minus-----"
             ]
+
+testDecodingHeaders = testCase "headers" (Right expected @=? pemParseBS content)
+  where expected = [ PEM { pemName = "", pemHeader = [("  some header ", BC.pack "some valuesome valuemore  value")], pemContent = B.empty }
+                   ]
+        content = BC.pack $ unlines
+            [ "-----BEGIN -----"
+            , "  some header : some value"
+            , "  some value"
+            , "    more  value "
+            , "-----END -----"
+            ]
+
 
 testMarshall pems = readPems == Right pems
     where readPems = pemParseBS writtenPems

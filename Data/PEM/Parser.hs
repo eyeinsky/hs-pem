@@ -23,6 +23,7 @@ import Data.Either (partitionEithers)
 import Data.ByteString qualified as BS
 import Data.ByteString.Lazy qualified as BL
 import Data.ByteString.Lazy.Char8 qualified as BL8
+import Data.List qualified as L
 
 import Data.PEM.Types
 import Data.ByteArray.Encoding (Base(Base64), convertFromBase)
@@ -49,9 +50,10 @@ parseOnePEM = \case
             case getPemHeaderLoop lbs of
                 Left err           -> Left err
                 Right (hdrs, lbs2) -> getPemContent name hdrs initial lbs2
-          where getPemHeaderLoop []     = Left $ Just "invalid PEM: no more content in header context"
-                getPemHeaderLoop (r:rs) = -- FIXME doesn't parse *any* headers yet
-                    Right ([], r:rs)
+          where getPemHeaderLoop ls = case parseEncapsulatedHeaders ls of
+                  (headers, rest) -> if L.null rest
+                    then Left $ Just "invalid PEM: no more content in header context"
+                    else Right (headers, rest)
 
         getPemContent name hdrs !contentLines lbs =
             case lbs of
@@ -171,6 +173,37 @@ endMarker = "-----END "
 
 pemMarker :: BL8.ByteString
 pemMarker = "-----"
+
+parseEncapsulatedHeaders :: [Line] -> ([Header], [Line])
+parseEncapsulatedHeaders ls = let
+  (maybeHeader, rest) = parseEncapsulatedHeader ls
+  in case maybeHeader of
+       Just header -> let (a, b) = parseEncapsulatedHeaders rest in (header : a, b)
+       Nothing -> ([], rest)
+
+parseEncapsulatedHeader :: [Line] -> (Maybe Header, [Line])
+parseEncapsulatedHeader = \case
+  ls@(line : rest) -> let
+    (prefix, suffix) = BL8.break (== ':') line
+    in if BL.null suffix
+    then (Nothing, ls)
+    else let
+      firstPart = trim $ BL.tail suffix
+      (moreParts, rest') = takeSpaced rest
+      in (Just (BL8.unpack prefix, BL.toStrict $ BL.concat $ firstPart : moreParts), rest')
+  [] -> (Nothing, [])
+  where
+    trimEnd = BL8.dropWhileEnd (== ' ')
+    trim = trimEnd . BL8.dropWhile (== ' ')
+    spacedValue line = let (spaces, rest) = BL8.span (== ' ') line
+      in if BL.null spaces
+      then Nothing
+      else Just $ trimEnd rest
+    takeSpaced = \case
+      lines_@(line : ls) -> case spacedValue line of
+        Just value -> let (values, rest) = takeSpaced ls in (value : values, rest)
+        Nothing -> ([], lines_)
+      [] -> ([], [])
 
 decodeBase64 :: BS.ByteString -> Either String BS.ByteString
 decodeBase64 bs = convertFromBase Base64 bs
