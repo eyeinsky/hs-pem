@@ -41,8 +41,7 @@ parseOnePEM = \case
             let (name, rest) = BL.splitAt (BL.length n - 5) n
             in if rest == pemMarker && valid name
             then next (BL8.unpack name) ls
-            else Left $ Just "invalid PEM delimiter found"
-
+            else Left $ Just $ "invalid PEM delimiter found: " <> show rest
 
         valid name = BL.null name || BL.last name /= 0x2d
 
@@ -63,7 +62,7 @@ parseOnePEM = \case
                                    in getPemContent name hdrs contentLines' ls
                               Just n  -> getPemName (finalizePem name hdrs contentLines) n ls
         finalizePem name hdrs contentLines nameEnd lbs
-            | nameEnd /= name = Left $ Just "invalid PEM: end name doesn't match start name"
+            | nameEnd /= name = Left $ Just $ "invalid PEM: end name doesn't match start name: " <> show (nameEnd, name)
             | otherwise       = do
                 chunks <- reverseAndPad contentLines
                 let pem = PEM { pemName    = name
