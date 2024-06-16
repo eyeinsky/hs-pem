@@ -14,9 +14,10 @@
 -- and a binary content encoded in base64.
 --
 module Data.PEM.Parser
-    ( pemParseBS
-    , pemParseLBS
-    ) where
+    -- ( pemParseBS
+    -- , pemParseLBS
+    -- )
+  where
 
 import Data.Char (isAsciiLower, isAsciiUpper, isDigit)
 import Data.Either (partitionEithers, rights)
